@@ -19,7 +19,7 @@ void LaneDetector::computeMask(const cv::Size size) noexcept {
   cv::cvtColor(_roi_mask, _roi_mask, cv::COLOR_GRAY2BGR);
 }
 
-void LaneDetector::computeBasicLine(const cv::Mat & frame) noexcept {
+void LaneDetector::computeBasicLines(const cv::Mat & frame) noexcept {
   _horizon_line = Line(cv::Point(0, frame.rows * 0.65), cv::Point(frame.cols - 1, frame.rows * 0.65));
   _car_line = Line(cv::Point(0, frame.rows * 0.95), cv::Point(frame.cols - 1, frame.rows * 0.95));
 }
@@ -46,7 +46,7 @@ void LaneDetector::processFrame(const cv::Mat& input_frame) {
   
   // compute mask and horizon line on the first frame
   if (_roi_mask.empty()) computeMask(resized.size());
-  if (_horizon_line.norm == 0) computeBasicLine(resized);
+  if (_horizon_line.norm == 0) computeBasicLines(resized);
 
   cv::Mat masked, edges;
 
