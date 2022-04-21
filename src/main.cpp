@@ -24,14 +24,12 @@ int main(int argc, char *argv[]) {
 
   cv::Mat input_frame;
   int nb_frame = 0;
-  for (;;) // for all inputs
-  {
+  for (;;) {
     input_video >> input_frame;
     if (input_frame.empty()) break;
 
     lane_detector.processFrame(input_frame);
 
-    //cv::imshow("Frame", input_frame);
     cv::waitKey(1);
 
     nb_frame++;

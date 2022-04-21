@@ -5,7 +5,7 @@
 #include <iostream>
 
 // create a mask to focus on the road part of the image
-void LaneDetector::computeMask(const cv::Size size){
+void LaneDetector::computeMask(const cv::Size size) noexcept {
   _roi_mask = cv::Mat::zeros(size, CV_8UC1);
 
   for (size_t i = 0; i < _roi_mask.rows; ++i) {
@@ -19,11 +19,34 @@ void LaneDetector::computeMask(const cv::Size size){
   cv::cvtColor(_roi_mask, _roi_mask, cv::COLOR_GRAY2BGR);
 }
 
+void LaneDetector::computeBasicLine(const cv::Mat & frame) noexcept {
+  _horizon_line = Line(cv::Point(0, frame.rows * 0.65), cv::Point(frame.cols - 1, frame.rows * 0.65));
+  _car_line = Line(cv::Point(0, frame.rows * 0.95), cv::Point(frame.cols - 1, frame.rows * 0.95));
+}
+
+bool LaneDetector::computeIntersection(const Line& line1, const Line& line2, cv::Point &intersection_point) const noexcept
+{
+  cv::Point x = line2.p1 - line1.p1;
+  cv::Point d1 = line1.p2 - line1.p1;
+  cv::Point d2 = line2.p2 - line2.p1;
+
+  float cross = d1.x*d2.y - d1.y*d2.x;
+  if (std::abs(cross) < 1e-8)
+    return false;
+
+  double t1 = (x.x * d2.y - x.y * d2.x) / cross;
+  intersection_point = line1.p1 + d1 * t1;
+  
+  return true;
+}
+
 void LaneDetector::processFrame(const cv::Mat& input_frame) {
   cv::Mat resized;
   cv::resize(input_frame, resized, input_frame.size() / 2);
-
+  
+  // compute mask and horizon line on the first frame
   if (_roi_mask.empty()) computeMask(resized.size());
+  if (_horizon_line.norm == 0) computeBasicLine(resized);
 
   cv::Mat masked, edges;
 
@@ -38,7 +61,7 @@ void LaneDetector::processFrame(const cv::Mat& input_frame) {
   cv::GaussianBlur(masked, masked, cv::Size(5, 5), 0, 0);
   cv::Canny(masked, edges, 50, 150);
    
-  // extract the two lines
+  // extract the two lines, or use the previous one if not detected
   Line line_yellow, line_white;
   if (extractLine(edges, yellow_mask, line_yellow)) {
     _prev_line_yellow = line_yellow;    
@@ -54,58 +77,13 @@ void LaneDetector::processFrame(const cv::Mat& input_frame) {
     line_white = _prev_line_white;
   }
 
-  // resize the lines
-  resizeLines(line_yellow, line_white, resized.rows * 0.6);
-  
   // plot results
-  if (line_white.norm != 0 && line_yellow.norm != 0) {
-    std::vector<cv::Point> points;
-    points.push_back(line_white.p1);
-    points.push_back(line_white.p2);
-    points.push_back(line_yellow.p1);
-    points.push_back(line_yellow.p2);
+  drawLane(line_yellow, line_white, resized);
 
-    cv::fillConvexPoly(resized,               //Image to be drawn on
-      points,             //C-Style array of points
-      cv::Scalar(255, 0, 0), //Color , BGR form
-      cv::LINE_AA,             // connectedness, 4 or 8
-      0);                // Bits of radius to treat as fraction
-
-    cv::circle(resized, line_yellow.p1, 3, cv::Scalar(0, 255, 0), 2);
-    cv::circle(resized, line_yellow.p2, 3, cv::Scalar(0, 0, 255), 2);
-    cv::circle(resized, line_white.p1, 3, cv::Scalar(0, 255, 0), 2);
-    cv::circle(resized, line_white.p2, 3, cv::Scalar(0, 0, 255), 2);
-
-    cv::imshow("result", resized);
-  }
+  cv::Mat final_result;
+  cv::resize(resized, final_result, input_frame.size());
+  cv::imshow("Lane", final_result);
  
-}
-
-void LaneDetector::resizeLines(Line& line_yellow, Line& line_white, const size_t max_heigh) const noexcept{
-
-  auto direction_yellow = line_yellow.p2 - line_yellow.p1;
-   
-  std::cout << "p1 " << line_yellow.p1.x << " " << line_yellow.p1.y << std::endl;
-  std::cout << "p2 " << line_yellow.p2.x << " " << line_yellow.p2.y << std::endl;
-  std::cout << "norm yellow " << line_yellow.norm << std::endl;
-  std::cout << "norm white " << line_white.norm << std::endl;
-
-  double coef = line_yellow.norm / line_white.norm;
-  
-  //line_yellow.p1 += coef * direction_yellow;
-  //line_yellow.p2 += coef * direction_yellow;
-  
-  auto direction_white = line_white.p1 - line_white.p2;
-  line_white.p1 += 0.5* coef * direction_white;
-  //line_white.p2 -= coef * direction_white;
-
-  std::cout << "new norm white " << cv::norm(line_white.p1 - line_white.p2)<< std::endl;
-
-  /* cv::line(resized, line_yellow.p1 + 1.5 * direction_yellow, line_yellow.p2 - 1.5 * direction_yellow, cv::Scalar(255, 0, 0), 3);
-   cv::line(resized, line_white.p1 + 1.5 * direction_white, line_white.p2 - 1.5 * direction_white, cv::Scalar(255, 0, 0), 3);
-   cv::imshow("result", resized);*/
-
-
 }
 
 void LaneDetector::colorMask(cv::Mat& frame, cv::Mat& yellow_mask, cv::Mat& white_mask) const noexcept {
@@ -147,4 +125,42 @@ bool LaneDetector::extractLine(const cv::Mat& edges, const cv::Mat& mask, Line& 
   }
 
   return false;
+}
+
+void LaneDetector::drawLane(const Line& line_yellow, const Line& line_white, cv::Mat& to_draw) const noexcept {
+  if (line_white.norm != 0 && line_yellow.norm != 0) {
+    std::vector<cv::Point> points;
+
+    cv::Point origin_point_yellow, horizon_point_yellow;
+    cv::Point origin_point_white, horizon_point_white;
+
+    if (computeIntersection(_horizon_line, line_yellow, horizon_point_yellow)) {
+      points.push_back(horizon_point_yellow);
+    }
+    else {
+      points.push_back(line_yellow.p2);
+    }
+    if (computeIntersection(_car_line, line_yellow, origin_point_yellow)) {
+      points.push_back(origin_point_yellow);
+    }
+    else {
+      points.push_back(line_yellow.p1);
+    }
+
+    if (computeIntersection(_car_line, line_white, origin_point_white)) {
+      points.push_back(origin_point_white);
+    }
+    else {
+      points.push_back(line_white.p2);
+    }
+    if (computeIntersection(_horizon_line, line_white, horizon_point_white)) {
+      points.push_back(horizon_point_white);
+    }
+    else {
+      points.push_back(line_white.p1);
+    }
+   
+    // draw the lane as a polyline
+    cv::fillConvexPoly(to_draw, points, cv::Scalar(255, 0, 0), cv::LINE_AA);
+  }
 }
