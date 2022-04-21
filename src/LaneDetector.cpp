@@ -42,7 +42,7 @@ bool LaneDetector::computeIntersection(const Line& line1, const Line& line2, cv:
   return true;
 }
 
-void LaneDetector::processFrame(const cv::Mat& input_frame) {
+void LaneDetector::processFrame(const cv::Mat& input_frame, cv::Mat &output_frame) {
   Chrono chrono;
 
   cv::Mat resized;
@@ -87,13 +87,11 @@ void LaneDetector::processFrame(const cv::Mat& input_frame) {
   drawLane(line_yellow, line_white, lane_print);
 
   // Fuse the lane
-  cv::Mat final_result;
-  cv::addWeighted(resized, 0.8, lane_print, 1.0, 0, final_result);
+  cv::addWeighted(resized, 0.8, lane_print, 1.0, 0, output_frame);
      
   // restore the original size
-  cv::resize(final_result, final_result, input_frame.size(), 0, 0, cv::InterpolationFlags::INTER_NEAREST);
-  cv::imshow("Lane", final_result);
-
+  cv::resize(output_frame, output_frame, input_frame.size(), 0, 0, cv::InterpolationFlags::INTER_NEAREST);
+  
   std::cout << "Processing frame time " << chrono.total() << "ms" << std::endl;
  
 }

@@ -6,4 +6,5 @@
 3. cmake --build . --target=ALL_BUILD
 
 ## execution
-ColorLane "challenge_video.mp4"
+1. execution with OpenCV live output : ColorLane "challenge_video.mp4"
+2. execution with ouput video generation : ColorLane "challenge_video.mp4" VIDEO

@@ -16,7 +16,7 @@ public:
   LaneDetector() = default;
   ~LaneDetector() = default;
 
-  void processFrame(const cv::Mat& input_frame);
+  void processFrame(const cv::Mat& input_frame, cv::Mat &output_frame);
 
 private:
   /// Computes the mask for the ROI zone corresponding to the road (cut sky and borders)
