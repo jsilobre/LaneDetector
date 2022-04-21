@@ -4,6 +4,8 @@
 #include <opencv2/highgui.hpp>
 #include <iostream>
 
+#include "Chrono.hpp"
+
 // create a mask to focus on the road part of the image
 void LaneDetector::computeMask(const cv::Size size) noexcept {
   _roi_mask = cv::Mat::zeros(size, CV_8UC1);
@@ -41,6 +43,8 @@ bool LaneDetector::computeIntersection(const Line& line1, const Line& line2, cv:
 }
 
 void LaneDetector::processFrame(const cv::Mat& input_frame) {
+  Chrono chrono;
+
   cv::Mat resized;
   cv::resize(input_frame, resized, input_frame.size() / 2);
   
@@ -77,15 +81,20 @@ void LaneDetector::processFrame(const cv::Mat& input_frame) {
     line_white = _prev_line_white;
   }
 
-  // plot results
+
+  // draw the lane on a new mat
   cv::Mat lane_print = cv::Mat::zeros(resized.size(), resized.type());
   drawLane(line_yellow, line_white, lane_print);
 
+  // Fuse the lane
   cv::Mat final_result;
   cv::addWeighted(resized, 0.8, lane_print, 1.0, 0, final_result);
-  
-  cv::resize(final_result, final_result, input_frame.size());
+     
+  // restore the original size
+  cv::resize(final_result, final_result, input_frame.size(), 0, 0, cv::InterpolationFlags::INTER_NEAREST);
   cv::imshow("Lane", final_result);
+
+  std::cout << "Processing frame time " << chrono.total() << "ms" << std::endl;
  
 }
 

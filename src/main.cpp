@@ -5,6 +5,7 @@
 #include <iostream>
 
 #include "LaneDetector.h"
+#include "Chrono.hpp"
 
 
 int main(int argc, char *argv[]) {
@@ -21,6 +22,7 @@ int main(int argc, char *argv[]) {
   }
   
   LaneDetector lane_detector;
+  Chrono chrono;
 
   cv::Mat input_frame;
   int nb_frame = 0;
@@ -34,6 +36,6 @@ int main(int argc, char *argv[]) {
 
     nb_frame++;
   }
-  std::cout << "Finished processing "<< nb_frame << " frames." << std::endl;
+  std::cout << "Finished processing "<< nb_frame << " frames in " << chrono.total() << "ms" << std::endl;
   return 0;
 }
