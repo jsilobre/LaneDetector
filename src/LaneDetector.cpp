@@ -1,0 +1,150 @@
+#include "LaneDetector.h"
+
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/highgui.hpp>
+#include <iostream>
+
+// create a mask to focus on the road part of the image
+void LaneDetector::computeMask(const cv::Size size){
+  _roi_mask = cv::Mat::zeros(size, CV_8UC1);
+
+  for (size_t i = 0; i < _roi_mask.rows; ++i) {
+    for (size_t j = 0; j < _roi_mask.cols; ++j) {
+      if (i > _roi_mask.rows * 0.60 && (j > _roi_mask.cols / 5) && (j < 4 * _roi_mask.cols / 5)) {
+        _roi_mask.at<uchar>(i, j) = 255;
+      }
+
+    }
+  }
+  cv::cvtColor(_roi_mask, _roi_mask, cv::COLOR_GRAY2BGR);
+}
+
+void LaneDetector::processFrame(const cv::Mat& input_frame) {
+  cv::Mat resized;
+  cv::resize(input_frame, resized, input_frame.size() / 2);
+
+  if (_roi_mask.empty()) computeMask(resized.size());
+
+  cv::Mat masked, edges;
+
+  // apply the ROI mask
+  cv::bitwise_and(resized, _roi_mask, masked);
+
+  // extract the lane lines by colors
+  cv::Mat yellow_mask, white_mask;
+  colorMask(masked, yellow_mask, white_mask);
+  
+  // apply some blur before 
+  cv::GaussianBlur(masked, masked, cv::Size(5, 5), 0, 0);
+  cv::Canny(masked, edges, 50, 150);
+   
+  // extract the two lines
+  Line line_yellow, line_white;
+  if (extractLine(edges, yellow_mask, line_yellow)) {
+    _prev_line_yellow = line_yellow;    
+  }
+  else {
+    line_yellow = _prev_line_yellow;
+  }
+
+  if (extractLine(edges, white_mask, line_white)) {
+    _prev_line_white = line_white;
+  }
+  else {
+    line_white = _prev_line_white;
+  }
+
+  // resize the lines
+  resizeLines(line_yellow, line_white, resized.rows * 0.6);
+  
+  // plot results
+  if (line_white.norm != 0 && line_yellow.norm != 0) {
+    std::vector<cv::Point> points;
+    points.push_back(line_white.p1);
+    points.push_back(line_white.p2);
+    points.push_back(line_yellow.p1);
+    points.push_back(line_yellow.p2);
+
+    cv::fillConvexPoly(resized,               //Image to be drawn on
+      points,             //C-Style array of points
+      cv::Scalar(255, 0, 0), //Color , BGR form
+      cv::LINE_AA,             // connectedness, 4 or 8
+      0);                // Bits of radius to treat as fraction
+
+    cv::circle(resized, line_yellow.p1, 3, cv::Scalar(0, 255, 0), 2);
+    cv::circle(resized, line_yellow.p2, 3, cv::Scalar(0, 0, 255), 2);
+    cv::circle(resized, line_white.p1, 3, cv::Scalar(0, 255, 0), 2);
+    cv::circle(resized, line_white.p2, 3, cv::Scalar(0, 0, 255), 2);
+
+    cv::imshow("result", resized);
+  }
+ 
+}
+
+void LaneDetector::resizeLines(Line& line_yellow, Line& line_white, const size_t max_heigh) const noexcept{
+
+  auto direction_yellow = line_yellow.p2 - line_yellow.p1;
+   
+  std::cout << "p1 " << line_yellow.p1.x << " " << line_yellow.p1.y << std::endl;
+  std::cout << "p2 " << line_yellow.p2.x << " " << line_yellow.p2.y << std::endl;
+  std::cout << "norm yellow " << line_yellow.norm << std::endl;
+  std::cout << "norm white " << line_white.norm << std::endl;
+
+  double coef = line_yellow.norm / line_white.norm;
+  
+  //line_yellow.p1 += coef * direction_yellow;
+  //line_yellow.p2 += coef * direction_yellow;
+  
+  auto direction_white = line_white.p1 - line_white.p2;
+  line_white.p1 += 0.5* coef * direction_white;
+  //line_white.p2 -= coef * direction_white;
+
+  std::cout << "new norm white " << cv::norm(line_white.p1 - line_white.p2)<< std::endl;
+
+  /* cv::line(resized, line_yellow.p1 + 1.5 * direction_yellow, line_yellow.p2 - 1.5 * direction_yellow, cv::Scalar(255, 0, 0), 3);
+   cv::line(resized, line_white.p1 + 1.5 * direction_white, line_white.p2 - 1.5 * direction_white, cv::Scalar(255, 0, 0), 3);
+   cv::imshow("result", resized);*/
+
+
+}
+
+void LaneDetector::colorMask(cv::Mat& frame, cv::Mat& yellow_mask, cv::Mat& white_mask) const noexcept {
+  cv::Mat grayscale, HSV, HLS ;
+
+  // Get the grayscale and HSV
+  cv::cvtColor(frame, HSV, cv::COLOR_BGR2HSV);
+  cv::cvtColor(frame, grayscale, cv::COLOR_BGR2GRAY);
+
+  // yellow thresold
+  cv::inRange(HSV, cv::Scalar(20, 90, 90), cv::Scalar(50, 255, 255), yellow_mask);
+
+  // white thresold 
+  cv::inRange(grayscale, 190, 255, white_mask);
+}
+
+bool LaneDetector::extractLine(const cv::Mat& edges, const cv::Mat& mask, Line& line) const noexcept{
+  cv::Mat masked_edges;
+  cv::bitwise_and(edges, mask, masked_edges);
+
+  std::vector<cv::Vec4i> lines;
+  cv::HoughLinesP(masked_edges, lines, 5 /*rho*/, CV_PI / 180 /*theta*/, 50 /*threshold*/, 30 /*minLineLength*/, 10 /*maxLineGap*/);
+  
+  // get the longest line
+  line = Line(); 
+  for (const auto l : lines) {
+    auto p1_tmp = cv::Point(l[0], l[1]);
+    auto p2_tmp = cv::Point(l[2], l[3]);
+    auto norm = cv::norm(p1_tmp - p2_tmp);
+    if (norm > line.norm) {
+      line.p1 = p1_tmp;
+      line.p2 = p2_tmp;
+      line.norm = norm;
+    }
+  }
+
+  if (line.norm > 0) {
+    return true;
+  }
+
+  return false;
+}
