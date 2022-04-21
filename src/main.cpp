@@ -33,7 +33,7 @@ int main(int argc, char *argv[]) {
   cv::VideoWriter output_video;
   if (generate_video) {
     auto size = cv::Size((int)input_video.get(cv::CAP_PROP_FRAME_WIDTH), (int)input_video.get(cv::CAP_PROP_FRAME_HEIGHT));
-    output_video.open("ouput.mp4", static_cast<int>(input_video.get(cv::CAP_PROP_FOURCC)), input_video.get(cv::CAP_PROP_FPS), size, true);
+    output_video.open("ouput.mp4", cv::VideoWriter::fourcc('m', 'p', '4', 'v'), input_video.get(cv::CAP_PROP_FPS), size, true);
   }
   cv::Mat input_frame, output_frame;
   int nb_frame = 0;
