@@ -57,7 +57,7 @@ void LaneDetector::processFrame(const cv::Mat& input_frame) {
   cv::Mat yellow_mask, white_mask;
   colorMask(masked, yellow_mask, white_mask);
   
-  // apply some blur before 
+  // apply some blur before edge detection
   cv::GaussianBlur(masked, masked, cv::Size(5, 5), 0, 0);
   cv::Canny(masked, edges, 50, 150);
    
@@ -78,10 +78,13 @@ void LaneDetector::processFrame(const cv::Mat& input_frame) {
   }
 
   // plot results
-  drawLane(line_yellow, line_white, resized);
+  cv::Mat lane_print = cv::Mat::zeros(resized.size(), resized.type());
+  drawLane(line_yellow, line_white, lane_print);
 
   cv::Mat final_result;
-  cv::resize(resized, final_result, input_frame.size());
+  cv::addWeighted(resized, 0.8, lane_print, 1.0, 0, final_result);
+  
+  cv::resize(final_result, final_result, input_frame.size());
   cv::imshow("Lane", final_result);
  
 }
